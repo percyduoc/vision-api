@@ -93,34 +93,32 @@ app.post("/api/metrics", async (req, res) => {
       // y columnas: ts timestamptz, ts_sec int, count int, unique_count int,
       // max_count int, min_count int, roll_avg float8, fps float8
       const q = `
-        INSERT INTO metricas
-          (camara_id, ts, ts_sec, count, unique_count, max_count, min_count, roll_avg, fps)
-        VALUES
-          ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        ON CONFLICT (camara_id, ts_sec)
-        DO UPDATE SET
-          count        = EXCLUDED.count,
-          unique_count = EXCLUDED.unique_count,
-          max_count    = GREATEST(COALESCE(metricas.max_count, 0), COALESCE(EXCLUDED.max_count, 0)),
-          min_count    = LEAST(
-                           COALESCE(metricas.min_count, EXCLUDED.min_count),
-                           EXCLUDED.min_count
-                         ),
-          roll_avg     = EXCLUDED.roll_avg,
-          fps          = EXCLUDED.fps
-        RETURNING id
-      `;
-      const params = [
-        camara_id,
-        b.timestamp,
-        ts_sec,
-        b.count,
-        b.unique ?? 0,
-        b.max ?? null,
-        b.min ?? null,
-        b.avg_window ?? null,
-        b.fps ?? null,
-      ];
+          INSERT INTO metricas
+            (camara_id, ts, ts_sec, count, unique_count, max_count, min_count, roll_avg, fps)
+          VALUES
+            ($1, $2, FLOOR(EXTRACT(EPOCH FROM $2))::int, $4, $5, $6, $7, $8, $9)
+          ON CONFLICT (camara_id, ts_sec)
+          DO UPDATE SET
+            count        = EXCLUDED.count,
+            unique_count = EXCLUDED.unique_count,
+            max_count    = GREATEST(COALESCE(metricas.max_count, 0), COALESCE(EXCLUDED.max_count, 0)),
+            min_count    = LEAST(COALESCE(metricas.min_count, EXCLUDED.min_count), EXCLUDED.min_count),
+            roll_avg     = EXCLUDED.roll_avg,
+            fps          = EXCLUDED.fps
+          RETURNING id
+        `;
+        const params = [
+          camara_id,
+          b.timestamp,            // $2 (ISO con 'Z')
+          /* $3 calculado en SQL */,
+          b.count,                // $4
+          b.unique ?? 0,          // $5
+          b.max ?? null,          // $6
+          b.min ?? null,          // $7
+          b.avg_window ?? null,   // $8
+          b.fps ?? null           // $9
+        ];
+
 
       const { rows } = await client.query(q, params);
       res.json({ ok: true, id: rows[0].id });
