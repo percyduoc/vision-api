@@ -1,3 +1,4 @@
+// src/server.js
 import "dotenv/config";
 import express from "express";
 import helmet from "helmet";
@@ -6,25 +7,36 @@ import cors from "cors";
 import fetch from "node-fetch";
 import { Pool } from "pg";
 import { z } from "zod";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
-app.use(helmet());
-app.use(cors()); // en prod: limita origins
+app.use(helmet());                 // mantén Helmet (sin CSP inline)
+app.use(cors());                   // en prod: limita origins
 app.use(express.json({ limit: "256kb" }));
 app.use(morgan("tiny"));
+
+// ====== STATIC (self-hosted) ======
+app.use(
+  "/vendor",
+  express.static(path.join(__dirname, "..", "node_modules", "chart.js", "dist"))
+);
+app.use("/static", express.static(path.join(__dirname, "..", "public")));
 
 // ====== ENV ======
 const {
   DATABASE_URL,
   PGSSL = "true",
   PORT = 8080,
-  API_KEY = "supersecreto",       // Bearer para ingestión
-  ADMIN_KEY = "",                 // opcional p/ reset
-  CAMERA_SNAPSHOT_URL = "",       // ej: http://IP:8080/shot.jpg
-  SNAP_BASIC_USER = "",           // opcional: basic auth simple del snapshot
-  SNAP_BASIC_PASS = "",           // opcional
-  METRICS_WINDOW_MIN = "10",      // minutos de ventana para el gráfico
-  DEFAULT_SOURCE_ID = "",         // opcional: cámara por defecto en el dashboard
+  API_KEY = "supersecreto", // Bearer para ingestión
+  ADMIN_KEY = "",           // opcional p/ reset
+  CAMERA_SNAPSHOT_URL = "", // ej: http://IP:8080/shot.jpg
+  SNAP_BASIC_USER = "",     // opcional: basic auth simple del snapshot
+  SNAP_BASIC_PASS = "",     // opcional
+  METRICS_WINDOW_MIN = "10",// minutos de ventana para el gráfico
+  DEFAULT_SOURCE_ID = "",   // opcional: cámara por defecto en el dashboard
 } = process.env;
 
 const pool = new Pool({
@@ -78,7 +90,9 @@ app.post("/api/metrics", async (req, res) => {
       return res.status(401).json({ error: "unauthorized" });
     }
     const b = Payload.parse(req.body);
-    const ts_sec = toEpochSec(b.timestamp);
+    // Nota: ts_sec se calcula en la BD como columna GENERATED (recomendado)
+    // si no la tienes, crea ts_sec y el índice único (camara_id, ts_sec)
+    toEpochSec(b.timestamp); // útil si quieres depurar
 
     const client = await pool.connect();
     try {
@@ -89,8 +103,8 @@ app.post("/api/metrics", async (req, res) => {
           .json({ error: "camera_not_found", source_id: b.source_id });
       }
 
-      // Asegúrate de tener UNIQUE(camara_id, ts_sec) en metricas
-      // y columnas: ts timestamptz, ts_sec int, count int, unique_count int,
+      // Columnas esperadas:
+      // ts timestamptz, ts_sec int GENERATED, count int, unique_count int,
       // max_count int, min_count int, roll_avg float8, fps float8
       const q = `
         INSERT INTO metricas
@@ -109,17 +123,15 @@ app.post("/api/metrics", async (req, res) => {
       `;
 
       const params = [
-        camara_id,           // $1
-        b.timestamp,         // $2 (ISO con 'Z')
-        b.count,             // $3
-        b.unique ?? 0,       // $4
-        b.max ?? null,       // $5
-        b.min ?? null,       // $6
-        b.avg_window ?? null,// $7
-        b.fps ?? null        // $8
+        camara_id,            // $1
+        b.timestamp,          // $2 (ISO con 'Z')
+        b.count,              // $3
+        b.unique ?? 0,        // $4
+        b.max ?? null,        // $5
+        b.min ?? null,        // $6
+        b.avg_window ?? null, // $7
+        b.fps ?? null,        // $8
       ];
-
-
 
       const { rows } = await client.query(q, params);
       res.json({ ok: true, id: rows[0].id });
@@ -135,7 +147,7 @@ app.post("/api/metrics", async (req, res) => {
 });
 
 /**
- * Dashboard HTML
+ * Dashboard HTML (self-hosted JS)
  */
 app.get("/", (_req, res) => {
   res.set("Content-Type", "text/html; charset=utf-8").send(DASH_HTML);
@@ -256,8 +268,6 @@ app.get("/metrics", async (req, res) => {
 
 /**
  * Snapshot proxy (opcional)
- * Si tu cámara expone /shot.jpg sin auth o con Basic, puedes mostrar la “vista en vivo”.
- * Para Digest, usa tu proxy Python.
  */
 app.get("/snapshot.jpg", async (_req, res) => {
   try {
@@ -288,7 +298,10 @@ app.post("/reset", async (req, res) => {
       return res.status(401).json({ error: "unauthorized" });
     }
     const source_id = String(req.body?.source_id || "");
-    const minutes = Math.max(1, Math.min(60 * 6, Number(req.body?.minutes || 10)));
+    const minutes = Math.max(
+      1,
+      Math.min(60 * 6, Number(req.body?.minutes || 10))
+    );
 
     const client = await pool.connect();
     try {
@@ -315,9 +328,13 @@ app.listen(PORT, () => {
   console.log(`API + Dashboard up on :${PORT}`);
 });
 
-// ====== HTML del dashboard ======
+// ====== HTML del dashboard (self-hosted scripts) ======
 const DASH_HTML = `<!DOCTYPE html>
-<html lang="es"><head>
+<html lang="es"
+      data-source="${(DEFAULT_SOURCE_ID || "").replace(/"/g,'&quot;')}"
+      data-minutes="${Number(METRICS_WINDOW_MIN)}"
+      data-has-reset="${ADMIN_KEY ? "1" : "0"}">
+<head>
 <meta charset="utf-8"><title>Dashboard Personas</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
@@ -363,67 +380,7 @@ const DASH_HTML = `<!DOCTYPE html>
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-  <script>
-    Chart.defaults.responsive = false; Chart.defaults.devicePixelRatio = 1;
-    const Y_MAX = 10, WINDOW_POINTS = 600;
-    const el = (id)=>document.getElementById(id);
-
-    const ctx = document.getElementById('chart').getContext('2d');
-    const chart = new Chart(ctx, {
-      type: 'line',
-      data: { labels: [], datasets: [{ label: 'Personas activas', data: [], fill: false, tension: 0.25 }] },
-      options: {
-        responsive:false, devicePixelRatio:1, animation:false, maintainAspectRatio:false,
-        scales:{ x:{ title:{display:true,text:'Tiempo'}},
-                 y:{ min:0, max:Y_MAX, beginAtZero:true, ticks:{ stepSize:1 }, title:{display:true,text:'Personas'} } },
-        plugins:{ legend:{ display:false } }
-      }
-    });
-
-    const DEFAULT_SOURCE_ID = "${(DEFAULT_SOURCE_ID || "").replace(/"/g,'\\"')}";
-    async function tick(){
-      try{
-        const qs = new URLSearchParams({ source_id: DEFAULT_SOURCE_ID, minutes: "${METRICS_WINDOW_MIN}" });
-        const res = await fetch('/metrics?' + qs.toString(), { cache:'no-store' });
-        const data = await res.json();
-        const now = data.now || {}; const history = data.history || [];
-
-        el('activos').textContent = now.count ?? 0;
-        el('max').textContent     = now.max ?? 0;
-        el('max_time').textContent= now.max_time ?? '—';
-        el('prom').textContent    = (now.prom ?? 0).toFixed(2);
-        el('unicos').textContent  = now.unicos ?? 0;
-        el('fps').textContent     = (now.fps ?? 0).toFixed(1);
-        el('uptime').textContent  = now.uptime ?? '00:00:00';
-        el('ts').textContent      = now.timestamp ?? '—';
-
-        const trend = now.trend30s ?? 0;
-        const tChip = document.getElementById('trend');
-        if (trend > 0) { tChip.textContent = "↑ +" + trend.toFixed(2) + " vs 30s prev"; tChip.className = "chip up"; }
-        else if (trend < 0) { tChip.textContent = "↓ " + trend.toFixed(2) + " vs 30s prev"; tChip.className = "chip down"; }
-        else { tChip.textContent = "— trend 30s"; tChip.className = "chip"; }
-
-        const view = history.slice(-WINDOW_POINTS);
-        chart.data.labels.length = 0; chart.data.datasets[0].data.length = 0;
-        for (let i = 0; i < view.length; i++) {
-          chart.data.labels.push(view[i].t.slice(11,19)); // HH:MM:SS
-          chart.data.datasets[0].data.push(view[i].count);
-        }
-        chart.update('none');
-
-        const url = '/snapshot.jpg?t=' + Date.now();
-        fetch(url, { cache:'no-store' }).then(r => { if (r.ok) document.getElementById('snap').src = url; }).catch(()=>{});
-      } catch(e) { console.error(e); }
-      finally { setTimeout(tick, 1000); }
-    }
-    tick();
-
-    document.getElementById('resetBtn').onclick = async () => {
-      const body = { source_id: DEFAULT_SOURCE_ID, minutes: ${Number(METRICS_WINDOW_MIN)} };
-      try {
-        await fetch('/reset', { method:'POST', headers: { 'Content-Type':'application/json', 'X-Admin-Key':'${ADMIN_KEY || ""}' }, body: JSON.stringify(body) });
-      } catch(e) { console.error(e); }
-    };
-  </script>
+  <!-- Self-hosted scripts (mismo origen) -->
+  <script src="/vendor/chart.umd.min.js" defer></script>
+  <script src="/static/dashboard.js" defer></script>
 </body></html>`;
