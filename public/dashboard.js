@@ -1,4 +1,3 @@
-// public/dashboard.js
 (() => {
     // Lee config desde data-* en el <html>
     const ROOT = document.documentElement;
@@ -10,8 +9,9 @@
     Chart.defaults.responsive = false;
     Chart.defaults.devicePixelRatio = 1;
   
-    const Y_MAX = 10;
+    const Y_MAX = 10; // ajusta si quieres
     const WINDOW_POINTS = 600;
+  
     const el = (id) => document.getElementById(id);
   
     const ctx = document.getElementById("chart").getContext("2d");
@@ -61,7 +61,7 @@
         el("ts").textContent = now.timestamp ?? "—";
   
         const trend = now.trend30s ?? 0;
-        const tChip = document.getElementById("trend");
+        const tChip = el("trend");
         if (trend > 0) {
           tChip.textContent = "↑ +" + trend.toFixed(2) + " vs 30s prev";
           tChip.className = "chip up";
@@ -73,6 +73,7 @@
           tChip.className = "chip";
         }
   
+        // Serie al gráfico
         const view = history.slice(-WINDOW_POINTS);
         chart.data.labels.length = 0;
         chart.data.datasets[0].data.length = 0;
@@ -82,12 +83,35 @@
         }
         chart.update("none");
   
+        // Snapshot (opcional)
         const url = "/snapshot.jpg?t=" + Date.now();
         fetch(url, { cache: "no-store" })
           .then((r) => {
-            if (r.ok) document.getElementById("snap").src = url;
+            if (r.ok) el("snap").src = url;
           })
           .catch(() => {});
+  
+        // === NUEVO: Ocupación + Semáforo ===
+        const capMax = now.capacidad_maxima ?? null;
+        const pct = now.capacidad_pct;
+        const sem = now.semaforo;
+        const disp = now.disponibles;
+  
+        el("oc_pct").textContent = (pct ?? "—") + (pct != null ? "%" : "");
+        el("capmax").textContent = "cap: " + (capMax ?? "—");
+        el("disp").textContent = "disp: " + (disp ?? "—");
+  
+        const semEl = el("oc_sem");
+        // limpia clases previas
+        semEl.className = "chip";
+        if (sem) {
+          const map = { verde: "sf-verde", amarillo: "sf-amarillo", rojo: "sf-rojo" };
+          semEl.className = "chip " + (map[sem] || "");
+          const emoji = sem === "verde" ? "🟢" : sem === "amarillo" ? "🟡" : "🔴";
+          semEl.textContent = `${emoji} ${sem}`;
+        } else {
+          semEl.textContent = "—";
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -96,7 +120,7 @@
     }
     tick();
   
-    // Botón reset: NO exponemos ADMIN_KEY en HTML; lo pedimos al usar
+    // Botón reset: NO exponemos ADMIN_KEY en HTML; se solicita al usar
     const resetBtn = document.getElementById("resetBtn");
     if (!HAS_RESET) resetBtn.style.display = "none";
     resetBtn.onclick = async () => {

@@ -1,4 +1,3 @@
-// src/server.js
 import "dotenv/config";
 import express from "express";
 import helmet from "helmet";
@@ -12,9 +11,22 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/**
+ * ⚠️ IMPORTANTE (DB):
+ * Asegúrate de tener ts_sec como INT generado desde ts y el índice único:
+ *
+ * ALTER TABLE metricas DROP CONSTRAINT IF EXISTS metricas_pkey;
+ * DROP INDEX IF EXISTS ux_metricas_camara_tssec;
+ * ALTER TABLE metricas DROP COLUMN IF EXISTS ts_sec;
+ * ALTER TABLE metricas
+ *   ADD COLUMN ts_sec INT GENERATED ALWAYS AS (FLOOR(EXTRACT(EPOCH FROM ts))::INT) STORED;
+ * CREATE UNIQUE INDEX IF NOT EXISTS ux_metricas_camara_tssec
+ *   ON metricas (camara_id, ts_sec);
+ */
+
 const app = express();
-app.use(helmet());                 // mantén Helmet (sin CSP inline)
-app.use(cors());                   // en prod: limita origins
+app.use(helmet());
+app.use(cors()); // en prod: limita origins
 app.use(express.json({ limit: "256kb" }));
 app.use(morgan("tiny"));
 
@@ -77,6 +89,18 @@ async function getCamId(client, sourceCode) {
   return cam.rows[0].id;
 }
 
+async function getCapacidadLugarByCam(client, camaraId) {
+  const { rows } = await client.query(
+    `SELECT l.capacidad_maxima
+       FROM camaras c
+       LEFT JOIN lugares l ON l.id = c.lugar_id
+      WHERE c.id = $1
+      LIMIT 1`,
+    [camaraId]
+  );
+  return rows?.[0]?.capacidad_maxima ?? null;
+}
+
 // ====== Rutas ======
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
@@ -90,8 +114,6 @@ app.post("/api/metrics", async (req, res) => {
       return res.status(401).json({ error: "unauthorized" });
     }
     const b = Payload.parse(req.body);
-    // Nota: ts_sec se calcula en la BD como columna GENERATED (recomendado)
-    // si no la tienes, crea ts_sec y el índice único (camara_id, ts_sec)
     toEpochSec(b.timestamp); // útil si quieres depurar
 
     const client = await pool.connect();
@@ -156,7 +178,7 @@ app.get("/", (_req, res) => {
 /**
  * API para el dashboard:
  * GET /metrics?source_id=cam_lobby_1&minutes=10
- * Lee últimos N minutos desde Postgres y arma KPIs + serie
+ * Lee últimos N minutos desde Postgres y arma KPIs + serie (+ semáforo)
  */
 app.get("/metrics", async (req, res) => {
   const source_id = (req.query.source_id || DEFAULT_SOURCE_ID || "").toString();
@@ -175,7 +197,6 @@ app.get("/metrics", async (req, res) => {
           return res.json({ now: {}, history: [] });
         }
       } else {
-        // si no hay source_id, tomar la primera cámara
         const r = await client.query("SELECT id, codigo FROM camaras LIMIT 1");
         if (r.rowCount) {
           camara_id = r.rows[0].id;
@@ -202,13 +223,12 @@ app.get("/metrics", async (req, res) => {
         count: Number(r.count || 0),
       }));
 
-      // KPIs
+      // KPIs básicos
       const counts = rows.map((r) => Number(r.count || 0));
       const cNow = counts[counts.length - 1];
       const cMax = Math.max(...counts);
       const cMin = Math.min(...counts);
-      const prom =
-        counts.reduce((a, b) => a + b, 0) / Math.max(1, counts.length);
+      const prom = counts.reduce((a, b) => a + b, 0) / Math.max(1, counts.length);
 
       // trend 30s: últimos 5s vs previos 30s
       const nowEpoch = Date.now();
@@ -242,6 +262,22 @@ app.get("/metrics", async (req, res) => {
 
       // Conserva del último row si existen
       const last = rows[rows.length - 1];
+
+      // === Capacidad/Lugar -> Ocupación y Semáforo ===
+      const capacidad_maxima = await getCapacidadLugarByCam(client, camara_id);
+      let capacidad_pct = null;
+      let semaforo = null;
+      let disponibles = null;
+      if (Number.isFinite(cNow) && capacidad_maxima && capacidad_maxima > 0) {
+        capacidad_pct = Math.min(100, Math.round((cNow / capacidad_maxima) * 100));
+        disponibles = Math.max(0, capacidad_maxima - cNow);
+
+        // Reglas: verde <=30%, amarillo (30,70), rojo >=70%
+        if (capacidad_pct <= 30) semaforo = "verde";
+        else if (capacidad_pct < 70) semaforo = "amarillo";
+        else semaforo = "rojo";
+      }
+
       const now = {
         timestamp: history[history.length - 1].t,
         count: cNow,
@@ -254,6 +290,12 @@ app.get("/metrics", async (req, res) => {
         unicos: Number(last.unique_count || 0),
         fps: Number(last.fps || 0),
         roll_avg: Number(last.roll_avg || 0),
+
+        // NUEVO
+        capacidad_maxima: capacidad_maxima ?? null,
+        capacidad_pct,
+        disponibles,
+        semaforo,
       };
 
       res.json({ now, history });
@@ -349,6 +391,11 @@ const DASH_HTML = `<!DOCTYPE html>
   .kpi .val { font-size:28px; font-weight:800 }
   .chip { display:inline-flex; gap:6px; padding:2px 8px; border-radius:9999px; font-size:12px; border:1px solid var(--border); color:var(--muted) }
   .chip.up { color:#97e0bb } .chip.down { color:#ffb3b3 }
+  /* Semáforo estilos */
+  .sf-verde    { background:#0f5132; color:#d1e7dd; border-color:#0f5132; }
+  .sf-amarillo { background:#664d03; color:#fff3cd; border-color:#664d03; }
+  .sf-rojo     { background:#842029; color:#f8d7da; border-color:#842029; }
+
   .row { display:grid; grid-template-columns:1.5fr .9fr; gap:12px; margin-top:12px }
   #chart { background:#0b0f14; border-radius:10px; border:1px solid var(--border); }
   .snapshot { width:100%; border-radius:10px; border:1px solid var(--border); background:#0b0f14; height:360px; object-fit:contain }
@@ -360,16 +407,27 @@ const DASH_HTML = `<!DOCTYPE html>
   <div class="container">
     <div class="grid">
       <div class="card kpi"><h2>Activos (ahora)</h2><div class="val" id="activos">0</div></div>
-      <div class="card kpi"><h2>Pico (Max)</h2><div class="val"><span id="max">0</span></div><div class="meta" id="max_time">—</div></div>
+      <div class="card kpi"><h2>Peak(Max)</h2><div class="val"><span id="max">0</span></div><div class="meta" id="max_time">—</div></div>
       <div class="card kpi"><h2>Promedio</h2><div class="val" id="prom">0</div></div>
       <div class="card kpi"><h2>Únicos (sesión)</h2><div class="val" id="unicos">0</div></div>
       <div class="card kpi"><h2>FPS</h2><div class="val" id="fps">0</div></div>
       <div class="card kpi"><h2>Uptime</h2><div class="val" id="uptime">00:00:00</div></div>
+
+      <!-- NUEVO KPI de Ocupación -->
+      <div class="card kpi">
+        <h2>Ocupación</h2>
+        <div class="val" id="oc_pct">—</div>
+        <div class="meta">
+          <span id="oc_sem" class="chip">—</span>
+          <span id="capmax" class="chip">cap: —</span>
+          <span id="disp"   class="chip">disp: —</span>
+        </div>
+      </div>
     </div>
 
     <div class="row">
       <div class="card">
-        <h3 class="panel-title">Serie temporal (últimos ~10 min) <span class="chip" id="ts">—</span> <span class="chip" id="trend"></span></h3>
+        <h3 class="panel-title">Serie temporal (últimos ~${Number(METRICS_WINDOW_MIN)} min) <span class="chip" id="ts">—</span> <span class="chip" id="trend"></span></h3>
         <canvas id="chart" width="800" height="360" style="display:block"></canvas>
         <div class="actions"><button id="resetBtn">Reset métricas</button></div>
       </div>
