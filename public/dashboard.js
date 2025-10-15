@@ -5,7 +5,7 @@
     const METRICS_WINDOW_MIN = Number(ROOT.dataset.minutes || "10");
     const HAS_RESET = ROOT.dataset.hasReset === "1";
   
-    // Chart.js viene de /vendor/chart.umd.min.js (self-hosted)
+    
     Chart.defaults.responsive = false;
     Chart.defaults.devicePixelRatio = 1;
   
@@ -54,10 +54,10 @@
         el("activos").textContent = now.count ?? 0;
         el("max").textContent = now.max ?? 0;
         el("max_time").textContent = now.max_time ?? "—";
-        el("prom").textContent = (now.prom ?? 0).toFixed(2);
-        el("unicos").textContent = now.unicos ?? 0;
+        // el("prom").textContent = (now.prom ?? 0).toFixed(2);
+        // el("unicos").textContent = now.unicos ?? 0;
         el("fps").textContent = (now.fps ?? 0).toFixed(1);
-        el("uptime").textContent = now.uptime ?? "00:00:00";
+        // el("uptime").textContent = now.uptime ?? "00:00:00";
         el("ts").textContent = now.timestamp ?? "—";
   
         const trend = now.trend30s ?? 0;
@@ -84,7 +84,7 @@
         chart.update("none");
   
         // Snapshot (opcional)
-        const url = "/snapshot.jpg?t=" + Date.now();
+        const url = "https://primary-alice-stuart-acceptable.trycloudflare.com/snapshot.jpg?t=" + Date.now();
         fetch(url, { cache: "no-store" })
           .then((r) => {
             if (r.ok) el("snap").src = url;

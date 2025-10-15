@@ -14,7 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /**
  * ⚠️ IMPORTANTE (DB):
  * Asegúrate de tener ts_sec como INT generado desde ts y el índice único:
- *
+ * 
  * ALTER TABLE metricas DROP CONSTRAINT IF EXISTS metricas_pkey;
  * DROP INDEX IF EXISTS ux_metricas_camara_tssec;
  * ALTER TABLE metricas DROP COLUMN IF EXISTS ts_sec;
@@ -47,7 +47,7 @@ const {
   CAMERA_SNAPSHOT_URL = "", // ej: http://IP:8080/shot.jpg
   SNAP_BASIC_USER = "",     // opcional: basic auth simple del snapshot
   SNAP_BASIC_PASS = "",     // opcional
-  METRICS_WINDOW_MIN = "10",// minutos de ventana para el gráfico
+  METRICS_WINDOW_MIN = "1000",// minutos de ventana para el gráfico
   DEFAULT_SOURCE_ID = "",   // opcional: cámara por defecto en el dashboard
 } = process.env;
 
