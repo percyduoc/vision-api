@@ -91,15 +91,43 @@ async function getCamId(client, sourceCode) {
 
 async function getCapacidadLugarByCam(client, camaraId) {
   const { rows } = await client.query(
-    `SELECT l.capacidad_maxima
-       FROM camaras c
-       LEFT JOIN lugares l ON l.id = c.lugar_id
-      WHERE c.id = $1
-      LIMIT 1`,
+    `
+    SELECT 
+      l.capacidad_maxima,
+      COALESCE(NULLIF(l.nombre, ''), c.codigo) AS lugar_nombre
+    FROM camaras c
+    LEFT JOIN lugares l ON l.id = c.lugar_id
+    WHERE c.id = $1
+    LIMIT 1
+    `,
     [camaraId]
   );
-  return rows?.[0]?.capacidad_maxima ?? null;
+  return{
+    capacidad_maxima: rows?.[0]?.capacidad_maxima ?? null,
+    lugar_nombre: rows?.[0]?.lugar_nombre ?? null,
+  };
+
+
 }
+async function getLugarInfoByCam(client, camaraId) {
+  const { rows } = await client.query(
+    `
+    SELECT 
+      l.capacidad_maxima,
+      COALESCE(NULLIF(l.nombre, ''), c.codigo) AS lugar_nombre
+    FROM camaras c
+    LEFT JOIN lugares l ON l.id = c.lugar_id
+    WHERE c.id = $1
+    LIMIT 1
+    `,
+    [camaraId]
+  );
+  return {
+    capacidad_maxima: rows?.[0]?.capacidad_maxima ?? null,
+    lugar_nombre: rows?.[0]?.lugar_nombre ?? null,
+  };
+}
+
 
 // ====== Rutas ======
 app.get("/health", (_req, res) => res.json({ ok: true }));
@@ -264,7 +292,7 @@ app.get("/metrics", async (req, res) => {
       const last = rows[rows.length - 1];
 
       // === Capacidad/Lugar -> Ocupación y Semáforo ===
-      const capacidad_maxima = await getCapacidadLugarByCam(client, camara_id);
+      const { capacidad_maxima, lugar_nombre } = await getLugarInfoByCam(client, camara_id);
       let capacidad_pct = null;
       let semaforo = null;
       let disponibles = null;
@@ -296,6 +324,7 @@ app.get("/metrics", async (req, res) => {
         capacidad_pct,
         disponibles,
         semaforo,
+        lugar_nombre, 
       };
 
       res.json({ now, history });
@@ -406,12 +435,14 @@ const DASH_HTML = `<!DOCTYPE html>
   <header><h1>Dashboard de personas (en vivo)</h1></header>
   <div class="container">
     <div class="grid">
+      <div class="card kpi"><h2>Lugar</h2><div class="val" id="lugar_nombre">—</div></div>
       <div class="card kpi"><h2>Activos (ahora)</h2><div class="val" id="activos">0</div></div>
       <div class="card kpi"><h2>Peak(Max)</h2><div class="val"><span id="max">0</span></div><div class="meta" id="max_time">—</div></div>
       <div class="card kpi"><h2>Promedio</h2><div class="val" id="prom">0</div></div>
       <div class="card kpi"><h2>Únicos (sesión)</h2><div class="val" id="unicos">0</div></div>
       <div class="card kpi"><h2>FPS</h2><div class="val" id="fps">0</div></div>
       <div class="card kpi"><h2>Uptime</h2><div class="val" id="uptime">00:00:00</div></div>
+      
 
       <!-- NUEVO KPI de Ocupación -->
       <div class="card kpi">
