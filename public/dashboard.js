@@ -84,7 +84,7 @@
         chart.update("none");
   
         // Snapshot (opcional)
-        const url = "https://primary-alice-stuart-acceptable.trycloudflare.com/snapshot.jpg?t=" + Date.now();
+        const url = "https://shipped-flow-candle-density.trycloudflare.com/snapshot.jpg" + Date.now();
         fetch(url, { cache: "no-store" })
           .then((r) => {
             if (r.ok) el("snap").src = url;
