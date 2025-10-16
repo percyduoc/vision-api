@@ -406,7 +406,7 @@ const DASH_HTML = `<!DOCTYPE html>
       data-minutes="${Number(METRICS_WINDOW_MIN)}"
       data-has-reset="${ADMIN_KEY ? "1" : "0"}">
 <head>
-<meta charset="utf-8"><title>Dashboard Personas</title>
+<meta charset="utf-8"><title>Dashboard Migratio out </title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root { --bg:#0b0f14; --card:#121821; --muted:#8aa0b2; --fg:#e9f0f6; --border:#1e2733; }
@@ -432,21 +432,18 @@ const DASH_HTML = `<!DOCTYPE html>
   button { background:#173045; color:#d7e6f2; border:1px solid var(--border); padding:8px 12px; border-radius:10px; cursor:pointer; }
 </style>
 </head><body>
-  <header><h1>Dashboard de personas (en vivo)</h1></header>
+  <header><h1>Dashboard Migratio Out (en vivo)</h1></header>
   <div class="container">
     <div class="grid">
       <div class="card kpi"><h2>Lugar</h2><div class="val" id="lugar_nombre">—</div></div>
-      <div class="card kpi"><h2>Activos (ahora)</h2><div class="val" id="activos">0</div></div>
+      <div class="card kpi"><h2>Activos</h2><div class="val" id="activos">0</div></div>
       <div class="card kpi"><h2>Peak(Max)</h2><div class="val"><span id="max">0</span></div><div class="meta" id="max_time">—</div></div>
       <div class="card kpi"><h2>Promedio</h2><div class="val" id="prom">0</div></div>
-      <div class="card kpi"><h2>Únicos (sesión)</h2><div class="val" id="unicos">0</div></div>
       <div class="card kpi"><h2>FPS</h2><div class="val" id="fps">0</div></div>
-      <div class="card kpi"><h2>Uptime</h2><div class="val" id="uptime">00:00:00</div></div>
-      
-
-      <!-- NUEVO KPI de Ocupación -->
+  
+    
       <div class="card kpi">
-        <h2>Ocupación</h2>
+        <h2>Total</h2>
         <div class="val" id="oc_pct">—</div>
         <div class="meta">
           <span id="oc_sem" class="chip">—</span>
@@ -459,13 +456,10 @@ const DASH_HTML = `<!DOCTYPE html>
     <div class="row">
       <div class="card">
         <h3 class="panel-title">Serie temporal (últimos ~${Number(METRICS_WINDOW_MIN)} min) <span class="chip" id="ts">—</span> <span class="chip" id="trend"></span></h3>
-        <canvas id="chart" width="800" height="360" style="display:block"></canvas>
+        <canvas id="chart" width="1000" height="360" style="display:block"></canvas>
         <div class="actions"><button id="resetBtn">Reset métricas</button></div>
       </div>
-      <div class="card">
-        <h3 class="panel-title">Vista en vivo</h3>
-        <img id="snap" class="snapshot" alt="snapshot">
-      </div>
+
     </div>
   </div>
 
