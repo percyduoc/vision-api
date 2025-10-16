@@ -455,7 +455,7 @@ const DASH_HTML = `<!DOCTYPE html>
 
     <div class="row">
       <div class="card">
-        <h3 class="panel-title">Serie temporal (últimos ~${Number(METRICS_WINDOW_MIN)} min) <span class="chip" id="ts">—</span> <span class="chip" id="trend"></span></h3>
+        <h3 class="panel-title">Serie temporal (últimos minutos) <span class="chip" id="ts">—</span> <span class="chip" id="trend"></span></h3>
         <canvas id="chart" width="1000" height="360" style="display:block"></canvas>
         <div class="actions"><button id="resetBtn">Reset métricas</button></div>
       </div>
