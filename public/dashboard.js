@@ -96,10 +96,13 @@
         const pct = now.capacidad_pct;
         const sem = now.semaforo;
         const disp = now.disponibles;
+        
   
         el("oc_pct").textContent = (pct ?? "—") + (pct != null ? "%" : "");
         el("capmax").textContent = "cap: " + (capMax ?? "—");
         el("disp").textContent = "disp: " + (disp ?? "—");
+        el("lugar_nombre").textContent = now.lugar_nombre ?? "—";
+        
   
         const semEl = el("oc_sem");
         // limpia clases previas
