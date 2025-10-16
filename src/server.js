@@ -438,7 +438,7 @@ const DASH_HTML = `<!DOCTYPE html>
       <div class="card kpi"><h2>Lugar</h2><div class="val" id="lugar_nombre">—</div></div>
       <div class="card kpi"><h2>Activos</h2><div class="val" id="activos">0</div></div>
       <div class="card kpi"><h2>Peak(Max)</h2><div class="val"><span id="max">0</span></div><div class="meta" id="max_time">—</div></div>
-      <div class="card kpi"><h2>Promedio</h2><div class="val" id="prom">0</div></div>
+
       <div class="card kpi"><h2>FPS</h2><div class="val" id="fps">0</div></div>
   
     
