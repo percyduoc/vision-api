@@ -203,11 +203,6 @@ app.get("/", (_req, res) => {
   res.set("Content-Type", "text/html; charset=utf-8").send(DASH_HTML);
 });
 
-/**
- * API para el dashboard:
- * GET /metrics?source_id=cam_lobby_1&minutes=10
- * Lee últimos N minutos desde Postgres y arma KPIs + serie (+ semáforo)
- */
 app.get("/metrics", async (req, res) => {
   const source_id = (req.query.source_id || DEFAULT_SOURCE_ID || "").toString();
   const minutes = Math.max(
@@ -288,10 +283,10 @@ app.get("/metrics", async (req, res) => {
         Math.floor((nowEpoch - withTs[0].epoch) / 1000)
       );
 
-      // Conserva del último row si existen
+  
       const last = rows[rows.length - 1];
 
-      // === Capacidad/Lugar -> Ocupación y Semáforo ===
+     
       const { capacidad_maxima, lugar_nombre } = await getLugarInfoByCam(client, camara_id);
       let capacidad_pct = null;
       let semaforo = null;
@@ -300,7 +295,7 @@ app.get("/metrics", async (req, res) => {
         capacidad_pct = Math.min(100, Math.round((cNow / capacidad_maxima) * 100));
         disponibles = Math.max(0, capacidad_maxima - cNow);
 
-        // Reglas: verde <=30%, amarillo (30,70), rojo >=70%
+    
         if (capacidad_pct <= 30) semaforo = "verde";
         else if (capacidad_pct < 70) semaforo = "amarillo";
         else semaforo = "rojo";
@@ -336,6 +331,55 @@ app.get("/metrics", async (req, res) => {
     res.status(500).json({ error: "server_error" });
   }
 });
+app.get('/api/lugares/status', async (_req, res) => {
+  try {
+    const client = await pool.connect();
+    try {
+      const q = `
+        SELECT
+          l.id, l.nombre, l.lat, l.lon, l.capacidad_maxima,
+          c.id AS camara_id
+        FROM lugares l
+        LEFT JOIN camaras c ON c.lugar_id = l.id AND c.habilitada = true
+        WHERE l.activo = true
+      `;
+      const { rows } = await client.query(q);
+      const out = [];
+      for (const r of rows) {
+        let countNow = null;
+        if (r.camara_id) {
+          const m = await client.query(
+            'SELECT count FROM metricas WHERE camara_id = $1 ORDER BY ts DESC LIMIT 1',
+            [r.camara_id]
+          );
+          if (m.rowCount) countNow = Number(m.rows[0].count || 0);
+        }
+        let semaforo = null;
+        if (r.capacidad_maxima && r.capacidad_maxima > 0 && countNow != null) {
+          const pct = Math.min(100, Math.round((countNow / r.capacidad_maxima) * 100));
+          if (pct <= 30) semaforo = 'verde';
+          else if (pct < 70) semaforo = 'amarillo';
+          else semaforo = 'rojo';
+        }
+        out.push({
+          id: r.id,
+          nombre: r.nombre,
+          lat: Number(r.lat),
+          lon: Number(r.lon),
+          capacidad_maxima: r.capacidad_maxima,
+          count_now: countNow,
+          semaforo,
+        });
+      }
+      res.json(out);
+    } finally {
+      client.release();
+    }
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
 
 /**
  * Snapshot proxy (opcional)
@@ -358,11 +402,7 @@ app.get("/snapshot.jpg", async (_req, res) => {
   }
 });
 
-/**
- * Reset (opcional): borra últimos X minutos de una cámara
- * Header: X-Admin-Key: ${ADMIN_KEY}
- * Body: { source_id: "cam_lobby_1", minutes: 10 }
- */
+
 app.post("/reset", async (req, res) => {
   try {
     if (!ADMIN_KEY || req.headers["x-admin-key"] !== ADMIN_KEY) {
