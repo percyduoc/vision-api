@@ -8,6 +8,8 @@ import { Pool } from "pg";
 import { z } from "zod";
 import path from "path";
 import { fileURLToPath } from "url";
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -400,6 +402,85 @@ app.get("/snapshot.jpg", async (_req, res) => {
   } catch {
     res.status(502).end();
   }
+});
+function signJwt(payload) {
+  return jwt.sign(payload, process.env.JWT_SECRET || 'dev', { expiresIn: '7d' });
+}
+function authMiddleware(req, res, next) {
+  const h = req.headers.authorization || '';
+  if (!h.startsWith('Bearer ')) return res.status(401).json({ error: 'no_token' });
+  try {
+    req.user = jwt.verify(h.slice(7), process.env.JWT_SECRET || 'dev');
+    next();
+  } catch {
+    res.status(401).json({ error: 'bad_token' });
+  }
+}
+
+// POST /api/auth/signup
+app.post('/api/auth/signup', async (req, res) => {
+  try {
+    const { nombre, apellido, email, password, tipo_usuario='trabajador' } = req.body || {};
+    if (!email || !password || !nombre || !apellido) return res.status(400).json({ error: 'missing' });
+    const client = await pool.connect();
+    try {
+      const dup = await client.query('SELECT 1 FROM usuarios_app WHERE email=$1 LIMIT 1', [email]);
+      if (dup.rowCount) return res.status(409).json({ error: 'email_exists' });
+      const hash = await bcrypt.hash(password, 10);
+      const ins = await client.query(
+        'INSERT INTO usuarios_app (nombre, apellido, email, password_hash, tipo_usuario) VALUES ($1,$2,$3,$4,$5) RETURNING id,nombre,apellido,email,tipo_usuario',
+        [nombre, apellido, email, hash, tipo_usuario]
+      );
+      res.json({ ok: true, user: ins.rows[0] });
+    } finally {
+      client.release();
+    }
+  } catch (e) {
+    console.error(e); res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// POST /api/auth/login
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    const client = await pool.connect();
+    try {
+      const q = await client.query('SELECT * FROM usuarios_app WHERE email=$1 AND eliminado=false', [email]);
+      if (!q.rowCount) return res.status(401).json({ error: 'bad_credentials' });
+      const u = q.rows[0];
+      const ok = await bcrypt.compare(password, u.password_hash);
+      if (!ok) return res.status(401).json({ error: 'bad_credentials' });
+      const token = signJwt({ sub: u.id, email: u.email, tipo: u.tipo_usuario });
+      res.json({
+        token,
+        user: { id: u.id, nombre: u.nombre, apellido: u.apellido, email: u.email, tipo_usuario: u.tipo_usuario }
+      });
+    } finally { client.release(); }
+  } catch (e) { console.error(e); res.status(500).json({ error: 'server_error' }); }
+});
+
+// GET /api/users/me
+app.get('/api/users/me', authMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const q = await client.query('SELECT id,nombre,apellido,email,tipo_usuario FROM usuarios_app WHERE id=$1', [req.user.sub]);
+    if (!q.rowCount) return res.status(404).json({ error: 'not_found' });
+    res.json(q.rows[0]);
+  } finally { client.release(); }
+});
+
+// PUT /api/users/me
+app.put('/api/users/me', authMiddleware, async (req, res) => {
+  const { nombre, apellido, tipo_usuario } = req.body || {};
+  const client = await pool.connect();
+  try {
+    const q = await client.query(
+      'UPDATE usuarios_app SET nombre=COALESCE($1,nombre), apellido=COALESCE($2,apellido), tipo_usuario=COALESCE($3,tipo_usuario), updated_at=now() WHERE id=$4 RETURNING id,nombre,apellido,email,tipo_usuario',
+      [nombre, apellido, tipo_usuario, req.user.sub]
+    );
+    res.json(q.rows[0]);
+  } finally { client.release(); }
 });
 
 
