@@ -28,7 +28,29 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.use(helmet());
-app.use(cors()); // en prod: limita origins
+
+// ====== CORS (permitir Flutter web local y tu dominio de Render) ======
+const allowedOrigins = [
+  /^http:\/\/localhost:\d+$/,               // Flutter web dev
+  'https://vision-api-wki3.onrender.com',   // tu API en Render
+  // agrega aquí otros dominios front si tienes
+];
+
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // curl/postman
+    const ok = allowedOrigins.some((o) => o instanceof RegExp ? o.test(origin) : o === origin);
+    return ok ? cb(null, true) : cb(new Error('CORS blocked'), false);
+  },
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization'],
+  credentials: false,
+  maxAge: 86400, // cachea preflight
+}));
+
+// Responder preflights explícitamente
+app.options('*', cors());
+ // en prod: limita origins
 app.use(express.json({ limit: "256kb" }));
 app.use(morgan("tiny"));
 
