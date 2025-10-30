@@ -446,11 +446,11 @@ app.post('/api/auth/signup', async (req, res) => {
     if (!email || !password || !nombre || !apellido) return res.status(400).json({ error: 'missing' });
     const client = await pool.connect();
     try {
-      const dup = await client.query('SELECT 1 FROM usuarios_app WHERE email=$1 LIMIT 1', [email]);
+      const dup = await client.query('SELECT 1 FROM public.usuarios_app WHERE email=$1 LIMIT 1', [email]);
       if (dup.rowCount) return res.status(409).json({ error: 'email_exists' });
       const hash = await bcrypt.hash(password, 10);
       const ins = await client.query(
-        'INSERT INTO usuarios_app (nombre, apellido, email, password_hash, tipo_usuario) VALUES ($1,$2,$3,$4,$5) RETURNING id,nombre,apellido,email,tipo_usuario',
+        'INSERT INTO public.usuarios_app (nombre, apellido, email, password_hash, tipo_usuario) VALUES ($1,$2,$3,$4,$5) RETURNING id,nombre,apellido,email,tipo_usuario',
         [nombre, apellido, email, hash, tipo_usuario]
       );
       res.json({ ok: true, user: ins.rows[0] });
@@ -468,7 +468,7 @@ app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body || {};
     const client = await pool.connect();
     try {
-      const q = await client.query('SELECT * FROM usuarios_app WHERE email=$1 AND eliminado=false', [email]);
+      const q = await client.query('SELECT * FROM public.usuarios_app WHERE email=$1 AND eliminado=false', [email]);
       if (!q.rowCount) return res.status(401).json({ error: 'bad_credentials' });
       const u = q.rows[0];
       const ok = await bcrypt.compare(password, u.password_hash);
@@ -486,7 +486,7 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/users/me', authMiddleware, async (req, res) => {
   const client = await pool.connect();
   try {
-    const q = await client.query('SELECT id,nombre,apellido,email,tipo_usuario FROM usuarios_app WHERE id=$1', [req.user.sub]);
+    const q = await client.query('SELECT id,nombre,apellido,email,tipo_usuario FROM public.usuarios_app WHERE id=$1', [req.user.sub]);
     if (!q.rowCount) return res.status(404).json({ error: 'not_found' });
     res.json(q.rows[0]);
   } finally { client.release(); }
@@ -498,7 +498,7 @@ app.put('/api/users/me', authMiddleware, async (req, res) => {
   const client = await pool.connect();
   try {
     const q = await client.query(
-      'UPDATE usuarios_app SET nombre=COALESCE($1,nombre), apellido=COALESCE($2,apellido), tipo_usuario=COALESCE($3,tipo_usuario), updated_at=now() WHERE id=$4 RETURNING id,nombre,apellido,email,tipo_usuario',
+      'UPDATE public.usuarios_app SET nombre=COALESCE($1,nombre), apellido=COALESCE($2,apellido), tipo_usuario=COALESCE($3,tipo_usuario), updated_at=now() WHERE id=$4 RETURNING id,nombre,apellido,email,tipo_usuario',
       [nombre, apellido, tipo_usuario, req.user.sub]
     );
     res.json(q.rows[0]);
