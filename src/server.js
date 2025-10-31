@@ -27,11 +27,11 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // curl/postman, apps nativas
-    const ok = allowedOrigins.some((o) => o instanceof RegExp ? o.test(origin) : o === origin);
-    // si no está permitido, no es error del server; simplemente no habilites CORS
-    return cb(null, ok);
+    if (!origin) return cb(null, true);
+    const ok = allowedOrigins.some(o => o instanceof RegExp ? o.test(origin) : o === origin);
+    return cb(null, ok); // ← no throw
   },
+  
   
   methods: ['GET','POST','PUT','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization'],
@@ -257,9 +257,10 @@ app.get("/metrics", async (req, res) => {
 
       // Serie
       const history = rows.map((r) => ({
-        t: r.ts.toISOString().replace(/\.\d+Z$/, "Z"),
+        t: new Date(r.ts).toISOString().replace(/\.\d+Z$/, "Z"),
         count: Number(r.count || 0),
       }));
+      
 
       // KPIs básicos
       const counts = rows.map((r) => Number(r.count || 0));
