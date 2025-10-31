@@ -13,18 +13,7 @@ import jwt from 'jsonwebtoken';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/**
- * ⚠️ IMPORTANTE (DB):
- * Asegúrate de tener ts_sec como INT generado desde ts y el índice único:
- * 
- * ALTER TABLE metricas DROP CONSTRAINT IF EXISTS metricas_pkey;
- * DROP INDEX IF EXISTS ux_metricas_camara_tssec;
- * ALTER TABLE metricas DROP COLUMN IF EXISTS ts_sec;
- * ALTER TABLE metricas
- *   ADD COLUMN ts_sec INT GENERATED ALWAYS AS (FLOOR(EXTRACT(EPOCH FROM ts))::INT) STORED;
- * CREATE UNIQUE INDEX IF NOT EXISTS ux_metricas_camara_tssec
- *   ON metricas (camara_id, ts_sec);
- */
+
 
 const app = express();
 app.use(helmet());
@@ -38,10 +27,12 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // curl/postman
+    if (!origin) return cb(null, true); // curl/postman, apps nativas
     const ok = allowedOrigins.some((o) => o instanceof RegExp ? o.test(origin) : o === origin);
-    return ok ? cb(null, true) : cb(new Error('CORS blocked'), false);
+    // si no está permitido, no es error del server; simplemente no habilites CORS
+    return cb(null, ok);
   },
+  
   methods: ['GET','POST','PUT','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization'],
   credentials: false,
