@@ -66,6 +66,7 @@ const {
   DEFAULT_SOURCE_ID = "",   // opcional: cámara por defecto en el dashboard
 } = process.env;
 
+
 const pool = new Pool({
   connectionString: DATABASE_URL,
   ssl: PGSSL === "true" ? { rejectUnauthorized: false } : false,
@@ -378,14 +379,15 @@ app.get('/api/lugares/status', async (_req, res) => {
           else semaforo = 'rojo';
         }
         out.push({
-          id: r.id,
+          id: Number(r.id),                       
           nombre: r.nombre,
-          lat: Number(r.lat),
-          lon: Number(r.lon),
-          capacidad_maxima: r.capacidad_maxima,
-          count_now: countNow,
+          lat: r.lat == null ? null : Number(r.lat),
+          lon: r.lon == null ? null : Number(r.lon),
+          capacidad_maxima: r.capacidad_maxima == null ? null : Number(r.capacidad_maxima),
+          count_now: countNow, 
           semaforo,
         });
+        
       }
       res.json(out);
     } finally {
