@@ -378,14 +378,15 @@ app.get('/api/lugares/status', async (_req, res) => {
           else semaforo = 'rojo';
         }
         out.push({
-          id: r.id,
+          id: Number(r.id),                        // <- aquí estaba el problema
           nombre: r.nombre,
-          lat: Number(r.lat),
-          lon: Number(r.lon),
-          capacidad_maxima: r.capacidad_maxima,
-          count_now: countNow,
+          lat: r.lat == null ? null : Number(r.lat),
+          lon: r.lon == null ? null : Number(r.lon),
+          capacidad_maxima: r.capacidad_maxima == null ? null : Number(r.capacidad_maxima),
+          count_now: countNow, // ya viene Number(...)
           semaforo,
         });
+        
       }
       res.json(out);
     } finally {
