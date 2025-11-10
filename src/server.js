@@ -353,16 +353,28 @@ app.get('/api/lugares/status', async (_req, res) => {
     try {
       const q = `
         SELECT
-          l.id, l.nombre, l.lat, l.lon, l.capacidad_maxima,
+          l.id,
+          l.nombre,
+          l.lat,
+          l.lon,
+          l.capacidad_maxima,
+          l.direccion,         -- NUEVO
+          l.comuna,            -- NUEVO
+          l.region,            -- NUEVO
           c.id AS camara_id
         FROM lugares l
-        LEFT JOIN camaras c ON c.lugar_id = l.id AND c.habilitada = true
+        LEFT JOIN camaras c
+          ON c.lugar_id = l.id
+         AND c.habilitada = true
         WHERE l.activo = true
       `;
+
       const { rows } = await client.query(q);
       const out = [];
+
       for (const r of rows) {
         let countNow = null;
+
         if (r.camara_id) {
           const m = await client.query(
             'SELECT count FROM metricas WHERE camara_id = $1 ORDER BY ts DESC LIMIT 1',
@@ -370,6 +382,7 @@ app.get('/api/lugares/status', async (_req, res) => {
           );
           if (m.rowCount) countNow = Number(m.rows[0].count || 0);
         }
+
         let semaforo = null;
         if (r.capacidad_maxima && r.capacidad_maxima > 0 && countNow != null) {
           const pct = Math.min(100, Math.round((countNow / r.capacidad_maxima) * 100));
@@ -377,17 +390,25 @@ app.get('/api/lugares/status', async (_req, res) => {
           else if (pct < 70) semaforo = 'amarillo';
           else semaforo = 'rojo';
         }
+
         out.push({
-          id: Number(r.id),                        // <- aquí estaba el problema
+          id: Number(r.id),
           nombre: r.nombre,
           lat: r.lat == null ? null : Number(r.lat),
           lon: r.lon == null ? null : Number(r.lon),
           capacidad_maxima: r.capacidad_maxima == null ? null : Number(r.capacidad_maxima),
-          count_now: countNow, // ya viene Number(...)
+
+          // NUEVOS CAMPOS
+          direccion: r.direccion || null,
+          comuna: r.comuna || null,
+          region: r.region || null,
+
+          // ya existentes
+          count_now: countNow,
           semaforo,
         });
-        
       }
+
       res.json(out);
     } finally {
       client.release();
@@ -397,6 +418,7 @@ app.get('/api/lugares/status', async (_req, res) => {
     res.status(500).json({ error: 'server_error' });
   }
 });
+
 
 /**
  * Snapshot proxy (opcional)
