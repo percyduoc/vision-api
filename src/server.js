@@ -243,7 +243,7 @@ app.get("/metrics", async (req, res) => {
         }
       }
 
-      // Traer últimos N minutos
+      
       const q = `
         SELECT ts, count, unique_count, max_count, min_count, roll_avg, fps
         FROM metricas
@@ -358,14 +358,15 @@ app.get('/api/lugares/status', async (_req, res) => {
           l.lat,
           l.lon,
           l.capacidad_maxima,
-          l.direccion,         -- NUEVO
-          l.comuna,            -- NUEVO
-          l.region,            -- NUEVO
-          c.id AS camara_id
+          l.direccion,
+          l.comuna,
+          l.region,
+          c.id      AS camara_id,
+          c.codigo  AS source_id      -- <== NUEVO
         FROM lugares l
         LEFT JOIN camaras c
           ON c.lugar_id = l.id
-         AND c.habilitada = true
+        AND c.habilitada = true
         WHERE l.activo = true
       `;
 
@@ -374,7 +375,6 @@ app.get('/api/lugares/status', async (_req, res) => {
 
       for (const r of rows) {
         let countNow = null;
-
         if (r.camara_id) {
           const m = await client.query(
             'SELECT count FROM metricas WHERE camara_id = $1 ORDER BY ts DESC LIMIT 1',
@@ -397,18 +397,14 @@ app.get('/api/lugares/status', async (_req, res) => {
           lat: r.lat == null ? null : Number(r.lat),
           lon: r.lon == null ? null : Number(r.lon),
           capacidad_maxima: r.capacidad_maxima == null ? null : Number(r.capacidad_maxima),
-
-          // NUEVOS CAMPOS
           direccion: r.direccion || null,
           comuna: r.comuna || null,
           region: r.region || null,
-
-          // ya existentes
+          source_id: r.source_id || null,          // <== NUEVO
           count_now: countNow,
           semaforo,
         });
       }
-
       res.json(out);
     } finally {
       client.release();
