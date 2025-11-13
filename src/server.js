@@ -361,8 +361,9 @@ app.get('/api/lugares/status', async (_req, res) => {
           l.direccion,
           l.comuna,
           l.region,
+          l.image_url,
           c.id      AS camara_id,
-          c.codigo  AS source_id      -- <== NUEVO
+          c.codigo  AS source_id      
         FROM lugares l
         LEFT JOIN camaras c
           ON c.lugar_id = l.id
