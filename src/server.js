@@ -401,9 +401,10 @@ app.get('/api/lugares/status', async (_req, res) => {
           direccion: r.direccion || null,
           comuna: r.comuna || null,
           region: r.region || null,
-          source_id: r.source_id || null,          // <== NUEVO
+          source_id: r.source_id || null,          
           count_now: countNow,
           semaforo,
+          image_url: r.image_url || null,
         });
       }
       res.json(out);
