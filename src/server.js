@@ -362,6 +362,7 @@ app.get('/api/lugares/status', async (_req, res) => {
           l.comuna,
           l.region,
           l.image_url,
+          l.categoria,
           c.id      AS camara_id,
           c.codigo  AS source_id      
         FROM lugares l
@@ -405,6 +406,7 @@ app.get('/api/lugares/status', async (_req, res) => {
           count_now: countNow,
           semaforo,
           image_url: r.image_url || null,
+          categoria: r.categoria || null,
         });
       }
       res.json(out);
