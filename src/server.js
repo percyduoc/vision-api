@@ -18,30 +18,30 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(helmet());
 
-// ====== CORS (permitir Flutter web local y tu dominio de Render) ======
+
 const allowedOrigins = [
-  /^http:\/\/localhost:\d+$/,               // Flutter web dev
-  'https://vision-api-wki3.onrender.com',   // tu API en Render
-  // agrega aquí otros dominios front si tienes
+  /^http:\/\/localhost:\d+$/,              
+  'https://vision-api-wki3.onrender.com',  
+  
 ];
 
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
     const ok = allowedOrigins.some(o => o instanceof RegExp ? o.test(origin) : o === origin);
-    return cb(null, ok); // ← no throw
+    return cb(null, ok);
   },
   
   
   methods: ['GET','POST','PUT','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization'],
   credentials: false,
-  maxAge: 86400, // cachea preflight
+  maxAge: 86400,
 }));
 
-// Responder preflights explícitamente
+
 app.options('*', cors());
- // en prod: limita origins
+
 app.use(express.json({ limit: "256kb" }));
 app.use(morgan("tiny"));
 
@@ -57,13 +57,13 @@ const {
   DATABASE_URL,
   PGSSL = "true",
   PORT = 8080,
-  API_KEY = "supersecreto", // Bearer para ingestión
-  ADMIN_KEY = "",           // opcional p/ reset
-  CAMERA_SNAPSHOT_URL = "", // ej: http://IP:8080/shot.jpg
-  SNAP_BASIC_USER = "",     // opcional: basic auth simple del snapshot
-  SNAP_BASIC_PASS = "",     // opcional
-  METRICS_WINDOW_MIN = "1000",// minutos de ventana para el gráfico
-  DEFAULT_SOURCE_ID = "",   // opcional: cámara por defecto en el dashboard
+  API_KEY = "supersecreto", 
+  ADMIN_KEY = "",          
+  CAMERA_SNAPSHOT_URL = "",
+  SNAP_BASIC_USER = "",    
+  SNAP_BASIC_PASS = "",   
+  METRICS_WINDOW_MIN = "1000",
+  DEFAULT_SOURCE_ID = "", 
 } = process.env;
 
 const pool = new Pool({
@@ -71,10 +71,10 @@ const pool = new Pool({
   ssl: PGSSL === "true" ? { rejectUnauthorized: false } : false,
 });
 
-// ====== Zod Schemas ======
+
 const Payload = z.object({
   source_id: z.string().min(1),
-  timestamp: z.string().datetime(), // ISO8601
+  timestamp: z.string().datetime(), 
   count: z.number().int().nonnegative(),
   unique: z.number().int().nonnegative().optional().default(0),
   max: z.number().int().nonnegative().nullable().optional(),
@@ -83,7 +83,7 @@ const Payload = z.object({
   fps: z.number().nullable().optional(),
 });
 
-// ====== Helpers ======
+
 function toEpochSec(isoTs) {
   return Math.floor(new Date(isoTs).getTime() / 1000);
 }
@@ -147,10 +147,7 @@ async function getLugarInfoByCam(client, camaraId) {
 // ====== Rutas ======
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-/**
- * Ingesta de métricas desde el worker
- * Header requerido: Authorization: Bearer ${API_KEY}
- */
+
 app.post("/api/metrics", async (req, res) => {
   try {
     if ((req.headers.authorization || "") !== `Bearer ${API_KEY}`) {
@@ -168,9 +165,6 @@ app.post("/api/metrics", async (req, res) => {
           .json({ error: "camera_not_found", source_id: b.source_id });
       }
 
-      // Columnas esperadas:
-      // ts timestamptz, ts_sec int GENERATED, count int, unique_count int,
-      // max_count int, min_count int, roll_avg float8, fps float8
       const q = `
         INSERT INTO metricas
           (camara_id, ts, count, unique_count, max_count, min_count, roll_avg, fps)
@@ -211,9 +205,7 @@ app.post("/api/metrics", async (req, res) => {
   }
 });
 
-/**
- * Dashboard HTML (self-hosted JS)
- */
+
 app.get("/", (_req, res) => {
   res.set("Content-Type", "text/html; charset=utf-8").send(DASH_HTML);
 });
@@ -223,7 +215,7 @@ app.get("/metrics", async (req, res) => {
   const minutes = Math.max(
     1,
     Math.min(60 * 6, Number(req.query.minutes || METRICS_WINDOW_MIN))
-  ); // 1..360 min
+  ); 
 
   try {
     const client = await pool.connect();
@@ -262,14 +254,13 @@ app.get("/metrics", async (req, res) => {
       }));
       
 
-      // KPIs básicos
+    
       const counts = rows.map((r) => Number(r.count || 0));
       const cNow = counts[counts.length - 1];
       const cMax = Math.max(...counts);
       const cMin = Math.min(...counts);
       const prom = counts.reduce((a, b) => a + b, 0) / Math.max(1, counts.length);
 
-      // trend 30s: últimos 5s vs previos 30s
       const nowEpoch = Date.now();
       const withTs = rows.map((r) => ({
         epoch: new Date(r.ts).getTime(),
@@ -498,26 +489,50 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // GET /api/users/me
+// GET /api/users/me
 app.get('/api/users/me', authMiddleware, async (req, res) => {
   const client = await pool.connect();
   try {
-    const q = await client.query('SELECT id,nombre,apellido,email,tipo_usuario FROM public.usuarios_app WHERE id=$1', [req.user.sub]);
+    // 1. Agregamos 'descripcion' y 'paises_visitados' al SELECT
+    const q = await client.query(
+      'SELECT id, nombre, apellido, email, tipo_usuario, descripcion, paises_visitados FROM public.usuarios_app WHERE id=$1', 
+      [req.user.sub]
+    );
+    
     if (!q.rowCount) return res.status(404).json({ error: 'not_found' });
     res.json(q.rows[0]);
-  } finally { client.release(); }
+  } finally { 
+    client.release(); 
+  }
 });
 
 // PUT /api/users/me
 app.put('/api/users/me', authMiddleware, async (req, res) => {
-  const { nombre, apellido, tipo_usuario } = req.body || {};
+  // 1. Recibimos también 'descripcion' y 'paises_visitados' del body
+  const { nombre, apellido, tipo_usuario, descripcion, paises_visitados } = req.body || {};
+  
   const client = await pool.connect();
   try {
+    // 2. Actualizamos la Query SQL para incluir los nuevos campos con COALESCE
+    // Nota: Se agregaron $4 y $5, y el ID ahora es $6
     const q = await client.query(
-      'UPDATE public.usuarios_app SET nombre=COALESCE($1,nombre), apellido=COALESCE($2,apellido), tipo_usuario=COALESCE($3,tipo_usuario), updated_at=now() WHERE id=$4 RETURNING id,nombre,apellido,email,tipo_usuario',
-      [nombre, apellido, tipo_usuario, req.user.sub]
+      `UPDATE public.usuarios_app 
+       SET 
+         nombre = COALESCE($1, nombre), 
+         apellido = COALESCE($2, apellido), 
+         tipo_usuario = COALESCE($3, tipo_usuario), 
+         descripcion = COALESCE($4, descripcion),
+         paises_visitados = COALESCE($5, paises_visitados),
+         updated_at = now() 
+       WHERE id = $6 
+       RETURNING id, nombre, apellido, email, tipo_usuario, descripcion, paises_visitados`,
+      [nombre, apellido, tipo_usuario, descripcion, paises_visitados, req.user.sub]
     );
+    
     res.json(q.rows[0]);
-  } finally { client.release(); }
+  } finally { 
+    client.release(); 
+  }
 });
 
 
