@@ -507,14 +507,15 @@ app.get('/api/users/me', authMiddleware, async (req, res) => {
 });
 
 // PUT /api/users/me
+// PUT /api/users/me
 app.put('/api/users/me', authMiddleware, async (req, res) => {
-  // 1. Recibimos también 'descripcion' y 'paises_visitados' del body
-  const { nombre, apellido, tipo_usuario, descripcion, paises_visitados } = req.body || {};
+  // 1. Agregamos 'current_hat' a lo que recibimos del frontend
+  const { nombre, apellido, tipo_usuario, descripcion, paises_visitados, current_hat } = req.body || {};
   
   const client = await pool.connect();
   try {
-    // 2. Actualizamos la Query SQL para incluir los nuevos campos con COALESCE
-    // Nota: Se agregaron $4 y $5, y el ID ahora es $6
+    // 2. Actualizamos la Query SQL para incluir current_hat
+    // Fíjate que agregamos COALESCE($6, current_hat) y el ID pasa a ser $7
     const q = await client.query(
       `UPDATE public.usuarios_app 
        SET 
@@ -523,10 +524,11 @@ app.put('/api/users/me', authMiddleware, async (req, res) => {
          tipo_usuario = COALESCE($3, tipo_usuario), 
          descripcion = COALESCE($4, descripcion),
          paises_visitados = COALESCE($5, paises_visitados),
+         current_hat = COALESCE($6, current_hat), 
          updated_at = now() 
-       WHERE id = $6 
-       RETURNING id, nombre, apellido, email, tipo_usuario, descripcion, paises_visitados`,
-      [nombre, apellido, tipo_usuario, descripcion, paises_visitados, req.user.sub]
+       WHERE id = $7
+       RETURNING id, nombre, apellido, email, tipo_usuario, descripcion, paises_visitados, current_hat, unlocked_hats`,
+      [nombre, apellido, tipo_usuario, descripcion, paises_visitados, current_hat, req.user.sub]
     );
     
     res.json(q.rows[0]);
