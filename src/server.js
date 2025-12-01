@@ -482,7 +482,7 @@ app.post('/api/auth/login', async (req, res) => {
       const token = signJwt({ sub: u.id, email: u.email, tipo: u.tipo_usuario });
       res.json({
         token,
-        user: { id: u.id, nombre: u.nombre, apellido: u.apellido, email: u.email, tipo_usuario: u.tipo_usuario }
+        user: { id: u.id, nombre: u.nombre, apellido: u.apellido, email: u.email, tipo_usuario: u.tipo_usuario , descripcion: u.descripcion, paises_visitados: u.paises_visitados },
       });
     } finally { client.release(); }
   } catch (e) { console.error(e); res.status(500).json({ error: 'server_error' }); }
@@ -493,7 +493,7 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/users/me', authMiddleware, async (req, res) => {
   const client = await pool.connect();
   try {
-    // 1. Agregamos 'descripcion' y 'paises_visitados' al SELECT
+
     const q = await client.query(
       'SELECT id, nombre, apellido, email, tipo_usuario, descripcion, paises_visitados FROM public.usuarios_app WHERE id=$1', 
       [req.user.sub]
