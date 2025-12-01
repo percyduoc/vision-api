@@ -124,6 +124,117 @@ async function getCapacidadLugarByCam(client, camaraId) {
 
 
 }
+
+// ==========================================
+// ====== FAVORITOS (Endpoints Nuevos) ======
+// ==========================================
+
+// GET /api/favorites -> Devuelve array de IDs [1, 5, 20]
+app.get('/api/favorites', authMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const q = await client.query(
+      'SELECT lugar_id FROM public.usuarios_favoritos WHERE usuario_id = $1',
+      [req.user.sub]
+    );
+    // Retornamos solo los IDs para facilitar el chequeo en Flutter
+    const ids = q.rows.map(r => Number(r.lugar_id));
+    res.json(ids);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'server_error' });
+  } finally {
+    client.release();
+  }
+});
+
+// POST /api/favorites -> Toggle (Si existe lo borra, si no existe lo crea)
+app.post('/api/favorites', authMiddleware, async (req, res) => {
+  const { lugar_id } = req.body;
+  if (!lugar_id) return res.status(400).json({ error: 'missing_lugar_id' });
+
+  const client = await pool.connect();
+  try {
+    // 1. Verificamos si ya es favorito
+    const check = await client.query(
+      'SELECT 1 FROM public.usuarios_favoritos WHERE usuario_id = $1 AND lugar_id = $2',
+      [req.user.sub, lugar_id]
+    );
+
+    if (check.rowCount > 0) {
+      // 2. Si existe, lo borramos (Quitar de favoritos)
+      await client.query(
+        'DELETE FROM public.usuarios_favoritos WHERE usuario_id = $1 AND lugar_id = $2',
+        [req.user.sub, lugar_id]
+      );
+      res.json({ status: 'removed', lugar_id });
+    } else {
+      // 3. Si no existe, lo insertamos (Agregar a favoritos)
+      await client.query(
+        'INSERT INTO public.usuarios_favoritos (usuario_id, lugar_id) VALUES ($1, $2)',
+        [req.user.sub, lugar_id]
+      );
+      res.json({ status: 'added', lugar_id });
+    }
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'server_error' });
+  } finally {
+    client.release();
+  }
+});
+
+
+app.get('/api/postponed', authMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const q = await client.query(
+      'SELECT lugar_id FROM public.usuarios_pospuestos WHERE usuario_id = $1',
+      [req.user.sub]
+    );
+    const ids = q.rows.map(r => Number(r.lugar_id));
+    res.json(ids);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'server_error' });
+  } finally {
+    client.release();
+  }
+});
+
+// POST /api/postponed -> Toggle (Agregar/Quitar)
+app.post('/api/postponed', authMiddleware, async (req, res) => {
+  const { lugar_id } = req.body;
+  if (!lugar_id) return res.status(400).json({ error: 'missing_lugar_id' });
+
+  const client = await pool.connect();
+  try {
+    const check = await client.query(
+      'SELECT 1 FROM public.usuarios_pospuestos WHERE usuario_id = $1 AND lugar_id = $2',
+      [req.user.sub, lugar_id]
+    );
+
+    if (check.rowCount > 0) {
+      await client.query(
+        'DELETE FROM public.usuarios_pospuestos WHERE usuario_id = $1 AND lugar_id = $2',
+        [req.user.sub, lugar_id]
+      );
+      res.json({ status: 'removed', lugar_id });
+    } else {
+      await client.query(
+        'INSERT INTO public.usuarios_pospuestos (usuario_id, lugar_id) VALUES ($1, $2)',
+        [req.user.sub, lugar_id]
+      );
+      res.json({ status: 'added', lugar_id });
+    }
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'server_error' });
+  } finally {
+    client.release();
+  }
+});
+
 async function getLugarInfoByCam(client, camaraId) {
   const { rows } = await client.query(
     `
