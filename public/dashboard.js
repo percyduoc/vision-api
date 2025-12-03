@@ -1,5 +1,5 @@
 (() => {
-    // Lee config desde data-* en el <html>
+  
     const ROOT = document.documentElement;
     const DEFAULT_SOURCE_ID = ROOT.dataset.source || "";
     const METRICS_WINDOW_MIN = Number(ROOT.dataset.minutes || "10");
@@ -9,7 +9,7 @@
     Chart.defaults.responsive = false;
     Chart.defaults.devicePixelRatio = 1;
   
-    const Y_MAX = 10; // ajusta si quieres
+    const Y_MAX = 10;
     const WINDOW_POINTS = 600;
   
     const el = (id) => document.getElementById(id);

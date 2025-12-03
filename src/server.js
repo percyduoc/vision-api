@@ -599,14 +599,14 @@ app.post('/api/auth/login', async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ error: 'server_error' }); }
 });
 
-// GET /api/users/me
+
 // GET /api/users/me
 app.get('/api/users/me', authMiddleware, async (req, res) => {
   const client = await pool.connect();
   try {
 
     const q = await client.query(
-      'SELECT id, nombre, apellido, email, tipo_usuario, descripcion, paises_visitados FROM public.usuarios_app WHERE id=$1', 
+      'SELECT id, nombre, apellido, email, tipo_usuario, descripcion, paises_visitados, current_hat, unlocked_hats FROM public.usuarios_app WHERE id=$1', 
       [req.user.sub]
     );
     
@@ -618,15 +618,13 @@ app.get('/api/users/me', authMiddleware, async (req, res) => {
 });
 
 // PUT /api/users/me
-// PUT /api/users/me
 app.put('/api/users/me', authMiddleware, async (req, res) => {
-  // 1. Agregamos 'current_hat' a lo que recibimos del frontend
+
   const { nombre, apellido, tipo_usuario, descripcion, paises_visitados, current_hat } = req.body || {};
   
   const client = await pool.connect();
   try {
-    // 2. Actualizamos la Query SQL para incluir current_hat
-    // Fíjate que agregamos COALESCE($6, current_hat) y el ID pasa a ser $7
+  
     const q = await client.query(
       `UPDATE public.usuarios_app 
        SET 
